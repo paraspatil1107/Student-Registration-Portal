@@ -19,43 +19,69 @@
         </div>
       </div>
       <div class="header-actions">
-        <span class="user-chip">Administrator</span>
+        <span class="user-chip" id="adminName">Administrator</span>
         <button id="logoutBtn" class="btn btn-danger">Logout</button>
       </div>
     </header>
 
     <div class="admin-page">
       <section class="panel">
-        <h3>Add New Course</h3>
-        <form id="courseForm" class="course-form">
-          <input type="text" id="courseCode" placeholder="Course Code" required />
-          <input type="text" id="courseName" placeholder="Course Name" required />
-          <textarea id="description" placeholder="Description" required></textarea>
-          <input type="number" id="credits" placeholder="Credits" required />
-          <input type="text" id="instructor" placeholder="Instructor" required />
-          <input type="number" id="capacity" placeholder="Capacity" required />
-          <button type="submit">Add Course</button>
-        </form>
-      </section>
-
-      <section class="panel">
         <div class="section-header">
           <div>
             <h3>Enrollment Summary</h3>
-            <p class="subtitle">Track total users, courses, and registration demand.</p>
+            <p class="subtitle">Active registrations, demand and waitlists across the catalog.</p>
           </div>
         </div>
         <div id="dashboardStats" class="stats-grid"></div>
         <div class="enrollment-list" id="enrollmentList"></div>
       </section>
 
+      <section class="panel">
+        <h3>Add New Course</h3>
+        <form id="courseForm" class="course-form">
+          <div class="form-row">
+            <label class="input-group"><span>Course code</span><input type="text" id="courseCode" placeholder="CS101" pattern="[A-Za-z]{2,6}\d{2,4}" title="Letters followed by digits, e.g. CS101" required /></label>
+            <label class="input-group"><span>Course name</span><input type="text" id="courseName" minlength="3" maxlength="100" required /></label>
+            <label class="input-group"><span>Instructor</span><input type="text" id="instructor" minlength="2" maxlength="60" required /></label>
+          </div>
+          <label class="input-group"><span>Description</span><textarea id="description" minlength="10" maxlength="1000" rows="3" required></textarea></label>
+          <div class="form-row">
+            <label class="input-group"><span>Credits</span><input type="number" id="credits" min="1" max="6" value="3" required /></label>
+            <label class="input-group"><span>Capacity</span><input type="number" id="capacity" min="1" max="500" value="40" required /></label>
+            <label class="input-group"><span>Department</span><input type="text" id="department" placeholder="Computer Science" maxlength="60" /></label>
+          </div>
+          <fieldset class="input-group">
+            <legend>Schedule (optional)</legend>
+            <div class="day-picker" id="dayPicker">
+              <label><input type="checkbox" value="Mon" /> Mon</label>
+              <label><input type="checkbox" value="Tue" /> Tue</label>
+              <label><input type="checkbox" value="Wed" /> Wed</label>
+              <label><input type="checkbox" value="Thu" /> Thu</label>
+              <label><input type="checkbox" value="Fri" /> Fri</label>
+              <label><input type="checkbox" value="Sat" /> Sat</label>
+            </div>
+          </fieldset>
+          <div class="form-row">
+            <label class="input-group"><span>Start time</span><input type="time" id="startTime" /></label>
+            <label class="input-group"><span>End time</span><input type="time" id="endTime" /></label>
+            <label class="input-group"><span>Location</span><input type="text" id="location" maxlength="40" placeholder="Hall 101" /></label>
+          </div>
+          <label class="input-group">
+            <span>Prerequisites (hold Ctrl/Cmd to select several)</span>
+            <select id="prerequisites" multiple size="4"></select>
+          </label>
+          <button type="submit" class="btn btn-primary">Add course</button>
+        </form>
+      </section>
+
       <section class="admin-panel">
         <div class="section-header">
           <div>
             <h3>All Courses</h3>
-            <p class="subtitle">Manage course catalog, capacity, and updates.</p>
+            <p class="subtitle">Manage the catalog, capacity and course status.</p>
           </div>
           <div class="panel-actions">
+            <label class="visually-hidden" for="dashboardSearch">Search courses</label>
             <input type="search" id="dashboardSearch" placeholder="Search courses" />
           </div>
         </div>
@@ -66,7 +92,7 @@
         <div class="section-header">
           <div>
             <h3>All Students</h3>
-            <p class="subtitle">View student accounts and roles.</p>
+            <p class="subtitle">Student accounts and their current credit load.</p>
           </div>
         </div>
         <div id="studentTable" class="table-wrapper"></div>
@@ -76,7 +102,16 @@
         <div class="section-header">
           <div>
             <h3>Registrations</h3>
-            <p class="subtitle">Recent enrollments and registration activity.</p>
+            <p class="subtitle">Mark courses completed so they count toward prerequisites.</p>
+          </div>
+          <div class="panel-actions">
+            <label class="visually-hidden" for="registrationFilter">Filter registrations</label>
+            <select id="registrationFilter">
+              <option value="">All statuses</option>
+              <option value="registered">Registered</option>
+              <option value="completed">Completed</option>
+              <option value="dropped">Dropped</option>
+            </select>
           </div>
         </div>
         <div id="registrationTable" class="table-wrapper"></div>

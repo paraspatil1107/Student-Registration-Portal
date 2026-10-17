@@ -7,265 +7,276 @@ if (!token || !user || user.role !== 'admin') {
 
 setPageTitle('Admin Dashboard');
 
-const courseForm = document.getElementById('courseForm');
-const dashboardStats = document.getElementById('dashboardStats');
-const dashboardSearch = document.getElementById('dashboardSearch');
-const courseTable = document.getElementById('courseTable');
-const studentTable = document.getElementById('studentTable');
-const registrationTable = document.getElementById('registrationTable');
-const enrollmentList = document.getElementById('enrollmentList');
-const logoutBtn = document.getElementById('logoutBtn');
+const $ = (id) => document.getElementById(id);
 
-let currentCourses = [];
+const courseForm = $('courseForm');
+const dashboardSearch = $('dashboardSearch');
+const registrationFilter = $('registrationFilter');
+
+const state = { courses: [], students: [], registrations: [] };
+
+const empty = (text) => `<p class="empty-state">${escapeHtml(text)}</p>`;
 
 const renderStats = (stats) => {
-  dashboardStats.innerHTML = `
-    <div class="stat-card">
-      <h4>Total Students</h4>
-      <strong>${stats.totalStudents}</strong>
-    </div>
-    <div class="stat-card">
-      <h4>Total Courses</h4>
-      <strong>${stats.totalCourses}</strong>
-    </div>
-    <div class="stat-card">
-      <h4>Total Registrations</h4>
-      <strong>${stats.totalRegistrations}</strong>
-    </div>
-  `;
+  const cards = [
+    ['Students', stats.totalStudents],
+    ['Courses', stats.totalCourses],
+    ['Active registrations', stats.totalRegistrations],
+    ['On waitlists', stats.totalWaitlisted],
+  ];
+  $('dashboardStats').innerHTML = cards
+    .map(([label, value]) => `<div class="stat-card"><h4>${label}</h4><strong>${value ?? 0}</strong></div>`)
+    .join('');
+
+  const top = (stats.enrollmentStats || []).slice(0, 4);
+  $('enrollmentList').innerHTML = top.length
+    ? top
+        .map((item) => {
+          const pct = item.capacity ? Math.min((item.count / item.capacity) * 100, 100) : 0;
+          return `
+            <div class="enrollment-item">
+              <h4>${escapeHtml(item.courseCode)} · ${escapeHtml(item.course)}</h4>
+              <p><strong>${item.count}</strong> / ${item.capacity} seats filled</p>
+              <div class="progress-track"><div style="width: ${pct}%"></div></div>
+            </div>
+          `;
+        })
+        .join('')
+    : empty('No enrollments yet.');
 };
 
-const renderEnrollmentInsights = (enrollmentStats = []) => {
-  if (!enrollmentStats.length) {
-    enrollmentList.innerHTML = '<p class="empty-state">No enrollment insights available yet.</p>';
-    return;
-  }
+const statusBadge = (status) => {
+  const tone = { active: 'success', registered: 'success', completed: 'primary', closed: 'danger', dropped: 'danger', inactive: 'warning' };
+  return `<span class="badge badge-${tone[status] || 'primary'}">${escapeHtml(status)}</span>`;
+};
 
-  const sortedStats = [...enrollmentStats].sort((a, b) => b.count - a.count);
+const renderCourses = () => {
+  const search = dashboardSearch.value.trim().toLowerCase();
+  const courses = state.courses.filter((course) =>
+    `${course.courseCode} ${course.courseName} ${course.instructor} ${course.department}`.toLowerCase().includes(search)
+  );
 
-  enrollmentList.innerHTML = sortedStats
-    .slice(0, 4)
-    .map((item) => `
-      <div class="enrollment-item">
-        <h4>${item.course || 'Unknown course'}</h4>
-        <p><strong>${item.count}</strong> registrations</p>
-        <div class="progress-track">
-          <div style="width: ${Math.min((item.count / 30) * 100, 100)}%"></div>
-        </div>
-      </div>
-    `)
+  $('courseTable').innerHTML = courses.length
+    ? `
+      <table>
+        <thead>
+          <tr><th>Code</th><th>Name</th><th>Instructor</th><th>Credits</th><th>Seats</th><th>Schedule</th><th>Status</th><th>Action</th></tr>
+        </thead>
+        <tbody>
+          ${courses
+            .map(
+              (course) => `
+                <tr>
+                  <td><strong>${escapeHtml(course.courseCode)}</strong></td>
+                  <td>${escapeHtml(course.courseName)}${
+                    course.prerequisites && course.prerequisites.length
+                      ? `<br /><small class="text-muted">Requires ${escapeHtml(course.prerequisites.map((p) => p.courseCode).join(', '))}</small>`
+                      : ''
+                  }</td>
+                  <td>${escapeHtml(course.instructor)}</td>
+                  <td>${course.credits}</td>
+                  <td>${course.enrolledCount} / ${course.capacity}</td>
+                  <td>${
+                    course.schedule && course.schedule.days && course.schedule.days.length
+                      ? `${escapeHtml(course.schedule.days.join('/'))} ${escapeHtml(course.schedule.startTime || '')}-${escapeHtml(course.schedule.endTime || '')}`
+                      : '<span class="text-muted">TBA</span>'
+                  }</td>
+                  <td>${statusBadge(course.status)}</td>
+                  <td>
+                    <button data-action="edit" data-id="${course._id}" class="btn btn-secondary small-btn">Edit</button>
+                    <button data-action="delete" data-id="${course._id}" class="btn btn-danger small-btn">Delete</button>
+                  </td>
+                </tr>
+              `
+            )
+            .join('')}
+        </tbody>
+      </table>
+    `
+    : empty(state.courses.length ? 'No courses match your search.' : 'No courses yet. Add one above or run npm run seed.');
+};
+
+const renderPrerequisiteOptions = () => {
+  $('prerequisites').innerHTML = state.courses
+    .map((course) => `<option value="${course._id}">${escapeHtml(course.courseCode)} · ${escapeHtml(course.courseName)}</option>`)
     .join('');
 };
 
-const debounce = (fn, delay = 250) => {
-  let timer;
-  return (...args) => {
-    clearTimeout(timer);
-    timer = setTimeout(() => fn(...args), delay);
-  };
+const renderStudents = () => {
+  $('studentTable').innerHTML = state.students.length
+    ? `
+      <table>
+        <thead><tr><th>Name</th><th>Email</th><th>Courses</th><th>Credits</th><th>Joined</th></tr></thead>
+        <tbody>
+          ${state.students
+            .map(
+              (student) => `
+                <tr>
+                  <td>${escapeHtml(student.name)}</td>
+                  <td>${escapeHtml(student.email)}</td>
+                  <td>${student.enrolledCourses}</td>
+                  <td>${student.enrolledCredits} / ${student.maxCredits}</td>
+                  <td>${formatDate(student.createdAt)}</td>
+                </tr>
+              `
+            )
+            .join('')}
+        </tbody>
+      </table>
+    `
+    : empty('No students have signed up yet.');
 };
 
-const filterCourses = () => {
-  const search = dashboardSearch?.value.trim().toLowerCase() || '';
-  if (!search) {
-    return currentCourses;
-  }
+const renderRegistrations = () => {
+  const status = registrationFilter.value;
+  const rows = state.registrations.filter((reg) => !status || reg.status === status);
 
-  return currentCourses.filter((course) => {
-    return [course.courseCode, course.courseName, course.instructor, course.description]
-      .join(' ')
-      .toLowerCase()
-      .includes(search);
-  });
+  $('registrationTable').innerHTML = rows.length
+    ? `
+      <table>
+        <thead><tr><th>ID</th><th>Student</th><th>Course</th><th>Date</th><th>Status</th><th>Action</th></tr></thead>
+        <tbody>
+          ${rows
+            .map(
+              (reg) => `
+                <tr>
+                  <td><code>${escapeHtml(reg.registrationId)}</code></td>
+                  <td>${escapeHtml(reg.student ? reg.student.name : 'Deleted user')}</td>
+                  <td>${escapeHtml(reg.course ? `${reg.course.courseCode} · ${reg.course.courseName}` : 'Deleted course')}</td>
+                  <td>${formatDate(reg.registeredAt)}</td>
+                  <td>${statusBadge(reg.status)}</td>
+                  <td>${
+                    reg.status === 'registered'
+                      ? `<button data-action="complete" data-id="${reg._id}" class="btn btn-secondary small-btn">Mark completed</button>`
+                      : ''
+                  }</td>
+                </tr>
+              `
+            )
+            .join('')}
+        </tbody>
+      </table>
+    `
+    : empty('No registrations to show.');
 };
-
-const renderCourses = (courses) => {
-  courseTable.innerHTML = courses.length ? `
-    <table>
-      <thead>
-        <tr>
-          <th>Code</th>
-          <th>Name</th>
-          <th>Instructor</th>
-          <th>Credits</th>
-          <th>Capacity</th>
-          <th>Action</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${courses.map(course => `
-          <tr>
-            <td>${course.courseCode}</td>
-            <td>${course.courseName}</td>
-            <td>${course.instructor}</td>
-            <td>${course.credits}</td>
-            <td>${course.capacity}</td>
-            <td>
-              <button data-edit-id="${course._id}" class="btn small-btn">Edit</button>
-              <button data-delete-id="${course._id}" class="btn btn-danger small-btn">Delete</button>
-            </td>
-          </tr>
-        `).join('')}
-      </tbody>
-    </table>
-  ` : '<p>No courses found.</p>';
-
-  document.querySelectorAll('[data-delete-id]').forEach((button) => {
-    button.addEventListener('click', async () => {
-      const courseId = button.dataset.deleteId;
-      try {
-        const confirmed = await showConfirm({
-          title: 'Confirm Delete',
-          message: 'This will permanently delete the course and its registrations.',
-          confirmText: 'Delete Course',
-          cancelText: 'Cancel',
-        });
-
-        if (!confirmed) return;
-
-        await authFetch(`/api/courses/${courseId}`, { method: 'DELETE' });
-        showToast('Course deleted successfully.', 'success');
-        loadAdminData();
-      } catch (error) {
-        showToast(error.message, 'error');
-      }
-    });
-  });
-
-  document.querySelectorAll('[data-edit-id]').forEach((button) => {
-    button.addEventListener('click', async () => {
-      const courseId = button.dataset.editId;
-      const course = courses.find((item) => item._id === courseId);
-      if (!course) return;
-
-      const updatedData = await showFormModal({
-        title: 'Edit Course',
-        submitText: 'Save Changes',
-        cancelText: 'Cancel',
-        fields: [
-          { name: 'courseCode', label: 'Course Code', type: 'text', value: course.courseCode, disabled: true },
-          { name: 'courseName', label: 'Course Name', type: 'text', value: course.courseName },
-          { name: 'description', label: 'Description', type: 'textarea', value: course.description },
-          { name: 'credits', label: 'Credits', type: 'number', value: course.credits },
-          { name: 'instructor', label: 'Instructor', type: 'text', value: course.instructor },
-          { name: 'capacity', label: 'Capacity', type: 'number', value: course.capacity },
-        ],
-      });
-
-      if (!updatedData) return;
-
-      try {
-        await authFetch(`/api/courses/${courseId}`, {
-          method: 'PUT',
-          body: JSON.stringify(updatedData),
-        });
-        showToast('Course updated successfully.', 'success');
-        loadAdminData();
-      } catch (error) {
-        showToast(error.message, 'error');
-      }
-    });
-  });
-};
-
-const renderStudents = (students) => {
-  studentTable.innerHTML = students.length ? `
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Email</th>
-          <th>Role</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${students.map(student => `
-          <tr>
-            <td>${student.name}</td>
-            <td>${student.email}</td>
-            <td><span class="badge">${student.role}</span></td>
-          </tr>
-        `).join('')}
-      </tbody>
-    </table>
-  ` : '<p>No students found.</p>';
-};
-
-const renderRegistrations = (registrations) => {
-  registrationTable.innerHTML = registrations.length ? `
-    <table>
-      <thead>
-        <tr>
-          <th>Student</th>
-          <th>Course</th>
-          <th>Date</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${registrations.map(reg => `
-          <tr>
-            <td>${reg.student?.name || 'N/A'}</td>
-            <td>${reg.course?.courseCode || 'N/A'} - ${reg.course?.courseName || 'N/A'}</td>
-            <td>${new Date(reg.registeredAt).toLocaleDateString()}</td>
-          </tr>
-        `).join('')}
-      </tbody>
-    </table>
-  ` : '<p>No registrations found.</p>';
-};
-
-courseForm.addEventListener('submit', async (event) => {
-  event.preventDefault();
-
-  const payload = {
-    courseCode: document.getElementById('courseCode').value,
-    courseName: document.getElementById('courseName').value,
-    description: document.getElementById('description').value,
-    credits: Number(document.getElementById('credits').value),
-    instructor: document.getElementById('instructor').value,
-    capacity: Number(document.getElementById('capacity').value),
-  };
-
-  try {
-    await authFetch('/api/courses', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
-    courseForm.reset();
-    loadAdminData();
-    showToast('Course added successfully.', 'success');
-  } catch (error) {
-    showToast(error.message, 'error');
-  }
-});
 
 const loadAdminData = async () => {
   try {
-    const stats = await authFetch('/api/admin/dashboard');
+    const [stats, courses, students, registrations] = await Promise.all([
+      authFetch('/api/admin/dashboard'),
+      authFetch('/api/courses'),
+      authFetch('/api/admin/students'),
+      authFetch('/api/admin/registrations'),
+    ]);
+    Object.assign(state, { courses, students, registrations });
+
     renderStats(stats);
-  renderEnrollmentInsights(stats.enrollmentStats || []);
-
-    const courses = await authFetch('/api/courses');
-    currentCourses = courses;
-    renderCourses(filterCourses());
-
-    const students = await authFetch('/api/admin/students');
-    renderStudents(students);
-
-    const registrations = await authFetch('/api/admin/registrations');
-    renderRegistrations(registrations);
+    renderCourses();
+    renderPrerequisiteOptions();
+    renderStudents();
+    renderRegistrations();
   } catch (error) {
     console.error(error);
     showToast(error.message, 'error');
   }
 };
 
-dashboardSearch?.addEventListener('input', debounce(() => {
-  renderCourses(filterCourses());
-}));
+const actions = {
+  async edit(id) {
+    const course = state.courses.find((item) => item._id === id);
+    if (!course) return;
 
-logoutBtn.addEventListener('click', () => {
-  logoutCurrentUser();
+    const updated = await showFormModal({
+      title: `Edit ${course.courseCode}`,
+      submitText: 'Save changes',
+      fields: [
+        { name: 'courseName', label: 'Course name', type: 'text', value: course.courseName, required: true },
+        { name: 'description', label: 'Description', type: 'textarea', value: course.description },
+        { name: 'instructor', label: 'Instructor', type: 'text', value: course.instructor, required: true },
+        { name: 'credits', label: 'Credits', type: 'number', value: course.credits, min: 1, max: 6 },
+        { name: 'capacity', label: 'Capacity', type: 'number', value: course.capacity, min: 1, max: 500 },
+        { name: 'status', label: 'Status', type: 'select', value: course.status, options: ['active', 'inactive', 'closed'] },
+      ],
+    });
+    if (!updated) return;
+
+    await authFetch(`/api/courses/${id}`, { method: 'PUT', body: JSON.stringify(updated) });
+    showToast(`${course.courseCode} updated.`, 'success');
+  },
+  async delete(id) {
+    const course = state.courses.find((item) => item._id === id);
+    const confirmed = await showConfirm({
+      title: `Delete ${course ? course.courseCode : 'course'}?`,
+      message: 'This permanently removes the course along with its registrations, waitlist and wishlist entries.',
+      confirmText: 'Delete course',
+      danger: true,
+    });
+    if (!confirmed) return;
+
+    await authFetch(`/api/courses/${id}`, { method: 'DELETE' });
+    showToast('Course deleted.', 'success');
+  },
+  async complete(id) {
+    await authFetch(`/api/admin/registrations/${id}`, { method: 'PATCH', body: JSON.stringify({ status: 'completed' }) });
+    showToast('Registration marked completed.', 'success');
+  },
+};
+
+document.querySelector('.admin-page').addEventListener('click', async (event) => {
+  const button = event.target.closest('button[data-action]');
+  if (!button || button.disabled) return;
+
+  button.disabled = true;
+  try {
+    await actions[button.dataset.action](button.dataset.id);
+    await loadAdminData();
+  } catch (error) {
+    showToast(error.message, 'error', 6000);
+  } finally {
+    button.disabled = false;
+  }
 });
+
+courseForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+
+  const days = [...document.querySelectorAll('#dayPicker input:checked')].map((input) => input.value);
+  const payload = {
+    courseCode: $('courseCode').value.trim(),
+    courseName: $('courseName').value.trim(),
+    description: $('description').value.trim(),
+    credits: Number($('credits').value),
+    instructor: $('instructor').value.trim(),
+    capacity: Number($('capacity').value),
+    prerequisites: [...$('prerequisites').selectedOptions].map((option) => option.value),
+  };
+  if ($('department').value.trim()) payload.department = $('department').value.trim();
+  if (days.length) {
+    payload.schedule = {
+      days,
+      startTime: $('startTime').value,
+      endTime: $('endTime').value,
+      location: $('location').value.trim() || 'TBD',
+    };
+  }
+
+  const submit = courseForm.querySelector('button[type="submit"]');
+  submit.disabled = true;
+  try {
+    await authFetch('/api/courses', { method: 'POST', body: JSON.stringify(payload) });
+    courseForm.reset();
+    showToast(`${payload.courseCode.toUpperCase()} added.`, 'success');
+    await loadAdminData();
+  } catch (error) {
+    showToast(error.message, 'error', 7000);
+  } finally {
+    submit.disabled = false;
+  }
+});
+
+dashboardSearch.addEventListener('input', debounce(renderCourses, 150));
+registrationFilter.addEventListener('change', renderRegistrations);
+$('logoutBtn').addEventListener('click', logoutCurrentUser);
+$('adminName').textContent = user ? user.name : 'Administrator';
 
 loadAdminData();

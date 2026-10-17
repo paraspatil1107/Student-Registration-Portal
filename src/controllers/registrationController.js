@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const Registration = require('../models/Registration');
 const Course = require('../models/Course');
 const Waitlist = require('../models/Waitlist');
+const { reorderWaitlist } = require('../utils/waitlist');
 
 // Helper to parse time string "HH:MM" into minutes from midnight
 const parseTimeToMinutes = (timeStr) => {
@@ -97,9 +98,14 @@ const registerForCourse = async (req, res) => {
     }
 
     // 5. Prerequisites Check
+    // A prerequisite counts if it is completed or being taken this semester.
     if (course.prerequisites && course.prerequisites.length > 0) {
-      const registeredIds = new Set(registeredCourses.map((c) => c._id.toString()));
-      const unfulfilledPrereqs = course.prerequisites.filter((p) => !registeredIds.has(p._id ? p._id.toString() : p.toString()));
+      const completedIds = await Registration.find({ student: req.user._id, status: 'completed' }).distinct('course');
+      const satisfiedIds = new Set([
+        ...registeredCourses.map((c) => c._id.toString()),
+        ...completedIds.map((id) => id.toString()),
+      ]);
+      const unfulfilledPrereqs = course.prerequisites.filter((p) => !satisfiedIds.has(p._id ? p._id.toString() : p.toString()));
 
       if (unfulfilledPrereqs.length > 0) {
         const prereqNames = unfulfilledPrereqs
@@ -131,6 +137,15 @@ const registerForCourse = async (req, res) => {
       status: 'registered',
       registeredAt: new Date(),
     });
+
+    // If the student was also queued for this course, they no longer need the waitlist spot.
+    const cancelled = await Waitlist.updateMany(
+      { student: req.user._id, course: courseId, status: 'waiting' },
+      { status: 'cancelled' }
+    );
+    if (cancelled.modifiedCount) {
+      await reorderWaitlist(courseId);
+    }
 
     res.status(201).json({ message: 'Course registered successfully.', registration });
   } catch (error) {
@@ -198,12 +213,7 @@ const dropCourse = async (req, res) => {
       topWait.status = 'enrolled';
       await topWait.save();
 
-      // Recalculate positions for remaining waitlisted students
-      const remaining = await Waitlist.find({ course: courseId, status: 'waiting' }).sort({ position: 1, requestedAt: 1 });
-      for (let i = 0; i < remaining.length; i++) {
-        remaining[i].position = i + 1;
-        await remaining[i].save();
-      }
+      await reorderWaitlist(courseId);
     }
 
     res.json({ message: 'Course dropped successfully.' });

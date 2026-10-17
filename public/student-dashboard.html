@@ -42,7 +42,7 @@
           <p class="subtitle">ID: <strong id="studentId">NS-000000</strong> · Current semester: <strong id="currentSemester">Fall 2026</strong></p>
         </div>
         <div class="page-actions">
-          <button class="btn btn-secondary icon-button" id="notificationButton">🔔 <span class="badge badge-primary" id="notificationCount">0</span></button>
+          <button class="btn btn-secondary icon-button" id="notificationButton" aria-label="Recent activity">🔔 <span class="badge badge-primary" id="notificationCount">0</span></button>
           <div class="profile-chip">
             <span id="avatarInitial">S</span>
           </div>
@@ -74,7 +74,7 @@
         <div class="progress-row">
           <div>
             <div class="progress-label">
-              <span>Completed credits</span>
+              <span>Credit load this semester</span>
               <strong id="progressCredits">0 / 24</strong>
             </div>
             <div class="progress-bar">
@@ -87,8 +87,8 @@
               <strong id="maxCredits">24</strong>
             </div>
             <div>
-              <span class="text-muted">CGPA</span>
-              <strong id="cgpaValue">N/A</strong>
+              <span class="text-muted">On waitlist</span>
+              <strong id="waitlistCount">0</strong>
             </div>
           </div>
         </div>
@@ -133,7 +133,9 @@
             <p class="subtitle">Search available courses and register directly</p>
           </div>
           <div class="card-actions">
-            <input type="text" id="courseSearch" placeholder="Search courses" />
+            <label class="visually-hidden" for="courseSearch">Search courses</label>
+            <input type="search" id="courseSearch" placeholder="Search code, name or instructor" />
+            <label class="visually-hidden" for="courseFilter">Filter by instructor</label>
             <select id="courseFilter">
               <option value="">All instructors</option>
             </select>
@@ -202,8 +204,8 @@
       <section class="panel" id="notifications">
         <div class="section-header">
           <div>
-            <h3 class="section-title">Recent Notifications</h3>
-            <p class="subtitle">Stay updated with system alerts</p>
+            <h3 class="section-title">Recent Activity</h3>
+            <p class="subtitle">Your latest registrations, drops and waitlist updates</p>
           </div>
         </div>
         <div id="notificationList" class="card-grid"></div>
@@ -219,17 +221,16 @@
         <div class="grid grid-2">
           <div class="card profile-card">
             <h4>Profile Details</h4>
-            <p><strong>Name:</strong> <span id="profileName">Student Name</span></p>
-            <p><strong>Email:</strong> <span id="profileEmail">student@example.com</span></p>
-            <p><strong>Student ID:</strong> <span id="profileId">NS-000000</span></p>
-            <p><strong>Department:</strong> <span id="profileDepartment">Computer Science</span></p>
+            <p><strong>Name:</strong> <span id="profileName">-</span></p>
+            <p><strong>Email:</strong> <span id="profileEmail">-</span></p>
+            <p><strong>Student ID:</strong> <span id="profileId">-</span></p>
           </div>
           <div class="card profile-card">
             <h4>Academic Details</h4>
             <p><strong>Semester:</strong> <span id="profileSemester">Fall 2026</span></p>
-            <p><strong>Year:</strong> <span id="profileYear">3</span></p>
-            <p><strong>Advisor:</strong> <span id="profileAdvisor">Dr. A. Sharma</span></p>
-            <p><strong>Date Joined:</strong> <span id="profileJoinDate">August 2024</span></p>
+            <p><strong>Credit limit:</strong> <span id="profileCreditLimit">24</span></p>
+            <p><strong>Courses completed:</strong> <span id="profileCompleted">0</span></p>
+            <p><strong>Member since:</strong> <span id="profileJoinDate">-</span></p>
           </div>
         </div>
       </section>

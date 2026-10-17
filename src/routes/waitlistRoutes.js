@@ -1,11 +1,14 @@
 const express = require('express');
 const { joinWaitlist, getMyWaitlist, leaveWaitlist } = require('../controllers/waitlistController');
 const { protect, authorizeRoles } = require('../middleware/authMiddleware');
+const { objectIdParam, courseIdBody } = require('../middleware/validate');
 
 const router = express.Router();
 
-router.post('/', protect, authorizeRoles('student'), joinWaitlist);
-router.get('/my-waitlist', protect, authorizeRoles('student'), getMyWaitlist);
-router.delete('/:courseId', protect, authorizeRoles('student'), leaveWaitlist);
+router.use(protect, authorizeRoles('student'));
+
+router.post('/', courseIdBody, joinWaitlist);
+router.get('/my-waitlist', getMyWaitlist);
+router.delete('/:courseId', objectIdParam('courseId'), leaveWaitlist);
 
 module.exports = router;

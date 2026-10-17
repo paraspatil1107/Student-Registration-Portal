@@ -7,9 +7,9 @@ const generateToken = (user) => {
       email: user.email,
       role: user.role,
     },
-    process.env.JWT_SECRET || 'student_portal_secret_key_2026',
+    process.env.JWT_SECRET,
     {
-      expiresIn: '7d',
+      expiresIn: process.env.JWT_EXPIRES_IN || '7d',
     }
   );
 };

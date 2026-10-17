@@ -7,575 +7,460 @@ if (!token || !user || user.role !== 'student') {
 
 setPageTitle('Student Dashboard');
 
-const courseList = document.getElementById('courseList');
-const myCourses = document.getElementById('myCourses');
-const courseSearch = document.getElementById('courseSearch');
-const courseFilter = document.getElementById('courseFilter');
-const logoutBtn = document.getElementById('logoutBtn');
-const totalCredits = document.getElementById('totalCredits');
-const enrolledCount = document.getElementById('enrolledCount');
-const remainingCredits = document.getElementById('pendingRegistrations');
-const currentSemester = document.getElementById('currentSemester');
-const progressCredits = document.getElementById('progressCredits');
-const progressFill = document.getElementById('progressFill');
-const maxCredits = document.getElementById('maxCredits');
-const cgpaValue = document.getElementById('cgpaValue');
-const upcomingClasses = document.getElementById('upcomingClasses');
-const notificationCount = document.getElementById('notificationCount');
-const notificationList = document.getElementById('notificationList');
-const profileName = document.getElementById('profileName');
-const profileEmail = document.getElementById('profileEmail');
-const profileId = document.getElementById('profileId');
-const profileDepartment = document.getElementById('profileDepartment');
-const profileSemester = document.getElementById('profileSemester');
-const profileYear = document.getElementById('profileYear');
-const profileAdvisor = document.getElementById('profileAdvisor');
-const profileJoinDate = document.getElementById('profileJoinDate');
-const studentName = document.getElementById('studentName');
-const studentId = document.getElementById('studentId');
-const avatarInitial = document.getElementById('avatarInitial');
-const notificationButton = document.getElementById('notificationButton');
+const $ = (id) => document.getElementById(id);
+
+const courseList = $('courseList');
+const myCourses = $('myCourses');
+const courseSearch = $('courseSearch');
+const courseFilter = $('courseFilter');
+const wishlistGrid = $('wishlistGrid');
+const waitlistGrid = $('waitlistGrid');
+const historyTableBody = $('historyTableBody');
+const notificationList = $('notificationList');
+const scheduleConflictBanner = $('scheduleConflictBanner');
 const sidebarLinks = document.querySelectorAll('.sidebar-link');
 
+const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+const daySlots = Object.fromEntries(DAYS.map((day) => [day, $(`day-${day}`)]));
 const semesterValue = 'Fall 2026';
-const maxCreditLimit = 24;
+
+// Everything the page renders from; refreshed by loadStudentData().
+const state = {
+  profile: user,
+  courses: [],
+  myCourses: { courses: [], totalCredits: 0, totalCourses: 0 },
+  wishlist: [],
+  waitlist: [],
+  history: [],
+};
+
+const maxCreditLimit = () => state.profile.maxCredits || 24;
+const empty = (text) => `<p class="empty-state">${escapeHtml(text)}</p>`;
+
+const scheduleText = (schedule) => {
+  if (!schedule || !schedule.days || !schedule.days.length) return 'Schedule TBA';
+  const time = schedule.startTime && schedule.endTime ? ` · ${schedule.startTime}-${schedule.endTime}` : '';
+  return `${schedule.days.join('/')}${time}${schedule.location ? ` · ${schedule.location}` : ''}`;
+};
+
+const seatBar = (course) => {
+  const enrolled = course.enrolledCount || 0;
+  const ratio = course.capacity ? enrolled / course.capacity : 0;
+  const tone = ratio >= 1 ? 'full' : ratio >= 0.8 ? 'almost' : '';
+  return `
+    <div class="seat-bar ${tone}" aria-hidden="true"><div style="width:${Math.min(ratio * 100, 100)}%"></div></div>
+    <p class="text-muted" style="font-size:0.82rem;margin:0">${enrolled} / ${course.capacity} seats filled${
+      ratio >= 1 ? ' · <span class="badge badge-danger">Full</span>' : ''
+    }</p>
+  `;
+};
+
+const primaryActionFor = (course, { isRegistered, isWaitlisted }) => {
+  if (isRegistered) return '<button disabled class="btn btn-secondary">Enrolled</button>';
+  if (isWaitlisted) return '<button disabled class="btn btn-secondary">On waitlist</button>';
+  if (course.status && course.status !== 'active') return `<button disabled class="btn btn-secondary">${escapeHtml(course.status)}</button>`;
+  if ((course.enrolledCount || 0) >= course.capacity) {
+    return `<button data-action="waitlist" data-id="${course._id}" class="btn btn-warning">Join waitlist</button>`;
+  }
+  return `<button data-action="register" data-id="${course._id}" class="btn btn-primary">Register</button>`;
+};
+
+const lookups = () => ({
+  registered: new Set(state.myCourses.courses.map((c) => c._id)),
+  wishlisted: new Set(state.wishlist.map((item) => item.course._id)),
+  waitlisted: new Set(state.waitlist.filter((i) => i.status === 'waiting').map((item) => item.course._id)),
+});
 
 const updateProfileSummary = () => {
-  const displayName = user.name || 'Student';
-  const displayId = user.id ? user.id.slice(-6).toUpperCase() : 'NS-000000';
+  const profile = state.profile;
+  const displayName = profile.name || 'Student';
+  const displayId = profile.id ? `NS-${profile.id.slice(-6).toUpperCase()}` : '-';
+  const completed = state.history.filter((h) => h.status === 'completed').length;
 
-  studentName.textContent = displayName;
-  studentId.textContent = displayId;
-  currentSemester.textContent = semesterValue;
-  profileName.textContent = displayName;
-  profileEmail.textContent = user.email || 'student@example.com';
-  profileId.textContent = displayId;
-  profileDepartment.textContent = 'Computer Science';
-  profileSemester.textContent = semesterValue;
-  profileYear.textContent = '3';
-  profileAdvisor.textContent = 'Dr. A. Sharma';
-  profileJoinDate.textContent = 'August 2024';
-  avatarInitial.textContent = displayName.charAt(0).toUpperCase();
-  maxCredits.textContent = maxCreditLimit;
-  cgpaValue.textContent = 'N/A';
+  $('studentName').textContent = displayName;
+  $('studentId').textContent = displayId;
+  $('currentSemester').textContent = semesterValue;
+  $('profileName').textContent = displayName;
+  $('profileEmail').textContent = profile.email || '-';
+  $('profileId').textContent = displayId;
+  $('profileSemester').textContent = semesterValue;
+  $('profileCreditLimit').textContent = maxCreditLimit();
+  $('profileCompleted').textContent = completed;
+  $('profileJoinDate').textContent = profile.createdAt ? formatDate(profile.createdAt) : '-';
+  $('avatarInitial').textContent = displayName.charAt(0).toUpperCase();
+  $('maxCredits').textContent = maxCreditLimit();
 };
 
-const renderCourses = (courses, registeredIds = new Set(), wishlistSet = new Set(), waitlistSet = new Set()) => {
-  courseList.innerHTML = courses.length
-    ? courses
-        .map((course) => {
-          const isRegistered = registeredIds.has(course._id);
-          const isWishlisted = wishlistSet.has(course._id);
-          const isWaitlisted = waitlistSet.has(course._id);
-          const isFull = (course.enrolledCount || 0) >= course.capacity;
-
-          let primaryAction = '';
-          if (isRegistered) {
-            primaryAction = `<button disabled class="btn btn-secondary">Enrolled</button>`;
-          } else if (isWaitlisted) {
-            primaryAction = `<button disabled class="btn btn-warning">On Waitlist</button>`;
-          } else if (isFull) {
-            primaryAction = `<button data-waitlist-id="${course._id}" class="btn btn-warning waitlist-btn">Join Waitlist</button>`;
-          } else {
-            primaryAction = `<button data-course-id="${course._id}" class="btn btn-primary register-btn">Register</button>`;
-          }
-
-          const bookmarkAction = isWishlisted
-            ? `<button data-remove-wishlist-id="${course._id}" class="btn btn-secondary">♥ Saved</button>`
-            : `<button data-wishlist-id="${course._id}" class="btn btn-secondary wishlist-btn">♡ Wishlist</button>`;
-
-          return `
-            <div class="course-card">
-              <h4>${course.courseCode} - ${course.courseName}</h4>
-              <p>${course.description}</p>
-              <p><strong>Instructor:</strong> ${course.instructor}</p>
-              <p><strong>Credits:</strong> ${course.credits}</p>
-              <p><strong>Capacity:</strong> ${course.capacity} ${isFull ? '<span class="badge badge-danger">Full</span>' : ''}</p>
-              <div class="card-actions">
-                ${primaryAction}
-                ${bookmarkAction}
-              </div>
-            </div>
-          `;
-        })
-        .join('')
-    : '<p class="text-muted">No courses found.</p>';
-
-  const selectedInstructor = courseFilter?.value || '';
-  const instructorValues = [...new Set(courses.map((course) => course.instructor))];
-  if (courseFilter) {
-    courseFilter.innerHTML = '<option value="">All instructors</option>' + instructorValues.map((value) => `<option value="${value}">${value}</option>`).join('');
-    courseFilter.value = selectedInstructor;
-  }
-
-  attachCourseActionEvents(courses);
+const renderInstructorFilter = () => {
+  const selected = courseFilter.value;
+  const instructors = [...new Set(state.courses.map((course) => course.instructor))].sort();
+  courseFilter.innerHTML =
+    '<option value="">All instructors</option>' +
+    instructors.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('');
+  courseFilter.value = instructors.includes(selected) ? selected : '';
 };
 
-const renderMyCourses = (data) => {
-  const courseCount = data.totalCourses || 0;
-  const credits = data.totalCredits || 0;
-  const remaining = Math.max(0, maxCreditLimit - credits);
+const renderCourses = () => {
+  const search = courseSearch.value.trim().toLowerCase();
+  const instructor = courseFilter.value;
+  const { registered, wishlisted, waitlisted } = lookups();
 
-  totalCredits.textContent = credits;
-  enrolledCount.textContent = courseCount;
-  remainingCredits.textContent = remaining;
-  progressCredits.textContent = `${credits} / ${maxCreditLimit}`;
-  progressFill.style.width = `${Math.min((credits / maxCreditLimit) * 100, 100)}%`;
+  const visible = state.courses.filter((course) => {
+    const haystack = `${course.courseCode} ${course.courseName} ${course.instructor}`.toLowerCase();
+    return (!search || haystack.includes(search)) && (!instructor || course.instructor === instructor);
+  });
 
-  if (!data.courses.length) {
-    myCourses.innerHTML = '<p class="text-muted">No registered courses yet.</p>';
+  if (!visible.length) {
+    courseList.innerHTML = empty(state.courses.length ? 'No courses match your search.' : 'No courses have been published yet.');
     return;
   }
 
-  myCourses.innerHTML = data.courses
-    .map(
-      (course) => `
-        <div class="course-card">
-          <h4>${course.courseCode} - ${course.courseName}</h4>
-          <p>${course.instructor}</p>
-          <p>Credits: ${course.credits}</p>
-          <button data-drop-id="${course._id}" class="btn btn-danger">Drop</button>
-        </div>
-      `
-    )
+  courseList.innerHTML = visible
+    .map((course) => {
+      const isWishlisted = wishlisted.has(course._id);
+      const prereqs = (course.prerequisites || []).map((p) => p.courseCode).filter(Boolean);
+      return `
+        <article class="course-card">
+          <h4>${escapeHtml(course.courseCode)} · ${escapeHtml(course.courseName)}</h4>
+          <p>${escapeHtml(course.description)}</p>
+          <div class="course-meta">
+            <span>👤 ${escapeHtml(course.instructor)}</span>
+            <span>🎓 ${course.credits} credits</span>
+            <span>🕒 ${escapeHtml(scheduleText(course.schedule))}</span>
+            ${prereqs.length ? `<span>🔗 Requires ${escapeHtml(prereqs.join(', '))}</span>` : ''}
+          </div>
+          ${seatBar(course)}
+          <div class="card-actions">
+            ${primaryActionFor(course, { isRegistered: registered.has(course._id), isWaitlisted: waitlisted.has(course._id) })}
+            <button data-action="${isWishlisted ? 'unwishlist' : 'wishlist'}" data-id="${course._id}" class="btn btn-secondary"
+              aria-pressed="${isWishlisted}">${isWishlisted ? '♥ Saved' : '♡ Save'}</button>
+          </div>
+        </article>
+      `;
+    })
     .join('');
-
-  document.querySelectorAll('[data-drop-id]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const courseId = btn.dataset.dropId;
-      try {
-        const confirmed = await showConfirm({
-          title: 'Confirm Drop',
-          message: 'Are you sure you want to drop this course? This action can affect your credit load.',
-          confirmText: 'Drop Course',
-          cancelText: 'Cancel',
-        });
-
-        if (!confirmed) {
-          return;
-        }
-
-        await authFetch(`/api/registrations/${courseId}`, { method: 'DELETE' });
-        showToast('Course dropped successfully.', 'success');
-        loadStudentData();
-      } catch (error) {
-        showToast(error.message, 'error');
-      }
-    });
-  });
 };
 
-const daySlots = {
-  Mon: document.getElementById('day-Mon'),
-  Tue: document.getElementById('day-Tue'),
-  Wed: document.getElementById('day-Wed'),
-  Thu: document.getElementById('day-Thu'),
-  Fri: document.getElementById('day-Fri'),
+const renderMyCourses = () => {
+  const { courses, totalCredits, totalCourses } = state.myCourses;
+  const limit = maxCreditLimit();
+
+  $('totalCredits').textContent = totalCredits;
+  $('enrolledCount').textContent = totalCourses;
+  $('pendingRegistrations').textContent = Math.max(0, limit - totalCredits);
+  $('progressCredits').textContent = `${totalCredits} / ${limit}`;
+  $('progressFill').style.width = `${Math.min((totalCredits / limit) * 100, 100)}%`;
+  $('waitlistCount').textContent = state.waitlist.filter((i) => i.status === 'waiting').length;
+
+  myCourses.innerHTML = courses.length
+    ? courses
+        .map(
+          (course) => `
+            <article class="course-card">
+              <h4>${escapeHtml(course.courseCode)} · ${escapeHtml(course.courseName)}</h4>
+              <div class="course-meta">
+                <span>👤 ${escapeHtml(course.instructor)}</span>
+                <span>🎓 ${course.credits} credits</span>
+                <span>🕒 ${escapeHtml(scheduleText(course.schedule))}</span>
+              </div>
+              <div class="card-actions">
+                <button data-action="drop" data-id="${course._id}" class="btn btn-danger">Drop</button>
+              </div>
+            </article>
+          `
+        )
+        .join('')
+    : empty('You have not registered for any courses yet. Browse the catalog below.');
 };
-const scheduleConflictBanner = document.getElementById('scheduleConflictBanner');
 
-const defaultDayPresets = [
-  ['Mon', 'Wed'],
-  ['Tue', 'Thu'],
-  ['Mon', 'Wed', 'Fri'],
-  ['Tue', 'Thu'],
-  ['Wed', 'Fri'],
-];
-const defaultTimePresets = [
-  { startTime: '10:00', endTime: '11:30', display: '10:00 AM - 11:30 AM' },
-  { startTime: '11:30', endTime: '13:00', display: '11:30 AM - 01:00 PM' },
-  { startTime: '14:00', endTime: '15:30', display: '02:00 PM - 03:30 PM' },
-  { startTime: '15:30', endTime: '17:00', display: '03:30 PM - 05:00 PM' },
-];
+// Only courses with a real schedule go on the timetable; the rest are listed underneath it.
+const renderWeeklySchedule = () => {
+  const courses = state.myCourses.courses;
+  const buckets = Object.fromEntries(DAYS.map((day) => [day, []]));
+  const unscheduled = [];
 
-const renderWeeklySchedule = (registeredCourses) => {
-  Object.values(daySlots).forEach((el) => {
-    if (el) el.innerHTML = '';
+  courses.forEach((course) => {
+    const s = course.schedule || {};
+    if (!s.days || !s.days.length || !s.startTime || !s.endTime) {
+      unscheduled.push(course);
+      return;
+    }
+    s.days.forEach((day) => buckets[day] && buckets[day].push(course));
   });
-  if (scheduleConflictBanner) scheduleConflictBanner.innerHTML = '';
 
-  if (!registeredCourses || !registeredCourses.length) {
-    Object.values(daySlots).forEach((el) => {
-      if (el) el.innerHTML = '<p class="text-muted text-center" style="font-size:0.8rem; margin-top:1rem;">No classes</p>';
-    });
-    return;
-  }
-
-  const dayBuckets = { Mon: [], Tue: [], Wed: [], Thu: [], Fri: [] };
   let hasConflicts = false;
-
-  registeredCourses.forEach((course, index) => {
-    let days = course.schedule && course.schedule.days && course.schedule.days.length
-      ? course.schedule.days
-      : defaultDayPresets[index % defaultDayPresets.length];
-
-    let timePreset = defaultTimePresets[index % defaultTimePresets.length];
-    let startTime = (course.schedule && course.schedule.startTime) || timePreset.startTime;
-    let endTime = (course.schedule && course.schedule.endTime) || timePreset.endTime;
-    let location = (course.schedule && course.schedule.location) || `Hall ${101 + index * 4}`;
-    let timeDisplay = `${startTime} - ${endTime}`;
-
-    days.forEach((dayKey) => {
-      const key = dayKey.slice(0, 3);
-      if (dayBuckets[key]) {
-        dayBuckets[key].push({
-          course,
-          startTime,
-          endTime,
-          timeDisplay,
-          location,
-        });
-      }
-    });
-  });
-
-  Object.keys(dayBuckets).forEach((dayKey) => {
-    const slots = dayBuckets[dayKey];
-    const container = daySlots[dayKey];
+  DAYS.forEach((day) => {
+    const container = daySlots[day];
     if (!container) return;
+    const slots = buckets[day].sort((a, b) => parseTimeToMinutes(a.schedule.startTime) - parseTimeToMinutes(b.schedule.startTime));
 
     if (!slots.length) {
       container.innerHTML = '<p class="text-muted text-center" style="font-size:0.8rem; margin-top:1rem;">No classes</p>';
       return;
     }
 
-    const conflictedCourses = new Set();
+    const conflicted = new Set();
     for (let i = 0; i < slots.length; i++) {
       for (let j = i + 1; j < slots.length; j++) {
-        const s1 = slots[i];
-        const s2 = slots[j];
-        const start1 = parseTimeToMinutes(s1.startTime);
-        const end1 = parseTimeToMinutes(s1.endTime);
-        const start2 = parseTimeToMinutes(s2.startTime);
-        const end2 = parseTimeToMinutes(s2.endTime);
-
-        if (start1 !== null && end1 !== null && start2 !== null && end2 !== null && start1 < end2 && start2 < end1) {
-          conflictedCourses.add(s1.course._id);
-          conflictedCourses.add(s2.course._id);
+        const a = slots[i].schedule;
+        const b = slots[j].schedule;
+        if (parseTimeToMinutes(a.startTime) < parseTimeToMinutes(b.endTime) && parseTimeToMinutes(b.startTime) < parseTimeToMinutes(a.endTime)) {
+          conflicted.add(slots[i]._id);
+          conflicted.add(slots[j]._id);
           hasConflicts = true;
         }
       }
     }
 
     container.innerHTML = slots
-      .map((item) => {
-        const isConflict = conflictedCourses.has(item.course._id);
-        return `
-          <div class="timetable-card ${isConflict ? 'conflict' : ''}">
-            <div class="timetable-code">${item.course.courseCode}</div>
-            <div style="font-weight: 600;">${item.course.courseName}</div>
-            <div class="timetable-time">🕒 ${item.timeDisplay}</div>
-            <div class="timetable-room">📍 ${item.location} · ${item.course.instructor}</div>
-            ${isConflict ? '<span class="badge badge-danger" style="margin-top:0.3rem;">⚠️ Conflict</span>' : ''}
+      .map(
+        (course) => `
+          <div class="timetable-card ${conflicted.has(course._id) ? 'conflict' : ''}">
+            <div class="timetable-code">${escapeHtml(course.courseCode)}</div>
+            <div style="font-weight: 600;">${escapeHtml(course.courseName)}</div>
+            <div class="timetable-time">🕒 ${escapeHtml(course.schedule.startTime)} - ${escapeHtml(course.schedule.endTime)}</div>
+            <div class="timetable-room">📍 ${escapeHtml(course.schedule.location || 'TBD')} · ${escapeHtml(course.instructor)}</div>
+            ${conflicted.has(course._id) ? '<span class="badge badge-danger" style="margin-top:0.3rem;">⚠️ Conflict</span>' : ''}
           </div>
-        `;
-      })
+        `
+      )
       .join('');
   });
 
-  if (hasConflicts && scheduleConflictBanner) {
-    scheduleConflictBanner.innerHTML = '<span class="badge badge-danger" style="font-size:0.85rem; padding:0.4rem 0.8rem;">⚠️ Schedule Conflict Detected</span>';
+  const notes = [];
+  if (hasConflicts) notes.push('<span class="badge badge-danger">⚠️ Schedule conflict detected</span>');
+  if (unscheduled.length) {
+    notes.push(`<span class="badge badge-warning">Time TBA: ${unscheduled.map((c) => escapeHtml(c.courseCode)).join(', ')}</span>`);
   }
+  scheduleConflictBanner.innerHTML = notes.join(' ');
 };
 
-const renderNotifications = (courses) => {
-  if (!courses.length) {
-    notificationCount.textContent = '0';
-    notificationList.innerHTML = '<p class="text-muted">No notifications yet.</p>';
+// Builds the activity feed from real registration history, newest first.
+const renderNotifications = () => {
+  const events = state.history
+    .filter((item) => item.course)
+    .flatMap((item) => {
+      const list = [{ when: item.registeredAt, title: `Registered for ${item.course.courseCode}`, detail: item.course.courseName }];
+      if (item.status === 'dropped' && item.droppedAt) {
+        list.push({ when: item.droppedAt, title: `Dropped ${item.course.courseCode}`, detail: item.course.courseName });
+      }
+      if (item.status === 'completed') {
+        list.push({ when: item.updatedAt, title: `Completed ${item.course.courseCode}`, detail: item.course.courseName });
+      }
+      return list;
+    })
+    .concat(
+      state.waitlist
+        .filter((item) => item.status === 'waiting')
+        .map((item) => ({ when: item.requestedAt, title: `Waitlisted for ${item.course.courseCode}`, detail: `Position #${item.position}` }))
+    )
+    .sort((a, b) => new Date(b.when) - new Date(a.when))
+    .slice(0, 6);
+
+  $('notificationCount').textContent = String(events.length);
+  notificationList.innerHTML = events.length
+    ? events
+        .map(
+          (event) => `
+            <div class="course-card">
+              <h4>${escapeHtml(event.title)}</h4>
+              <p>${escapeHtml(event.detail)}</p>
+              <p class="text-muted">${formatDate(event.when)}</p>
+            </div>
+          `
+        )
+        .join('')
+    : empty('No activity yet.');
+};
+
+const renderWishlist = () => {
+  if (!state.wishlist.length) {
+    wishlistGrid.innerHTML = empty('Your wishlist is empty. Use ♡ Save on any course to bookmark it.');
     return;
   }
 
-  const notifications = courses.slice(0, 3).map((course, index) => ({
-    title: `Registered for ${course.courseCode}`,
-    message: `Your registration for ${course.courseName} is confirmed.`,
-    time: `${2 + index}h ago`,
-  }));
+  const { waitlisted } = lookups();
+  wishlistGrid.innerHTML = state.wishlist
+    .map((item) => {
+      const course = { ...item.course, enrolledCount: item.enrolledCount };
+      return `
+        <article class="course-card">
+          <h4>${escapeHtml(course.courseCode)} · ${escapeHtml(course.courseName)}</h4>
+          <div class="course-meta">
+            <span>👤 ${escapeHtml(course.instructor)}</span>
+            <span>🎓 ${course.credits} credits</span>
+          </div>
+          ${seatBar(course)}
+          <div class="card-actions">
+            ${primaryActionFor(course, { isRegistered: item.isRegistered, isWaitlisted: waitlisted.has(course._id) })}
+            <button data-action="unwishlist" data-id="${course._id}" class="btn btn-secondary">Remove</button>
+          </div>
+        </article>
+      `;
+    })
+    .join('');
+};
 
-  notificationCount.textContent = `${notifications.length}`;
-  notificationList.innerHTML = notifications
+const renderWaitlist = () => {
+  if (!state.waitlist.length) {
+    waitlistGrid.innerHTML = empty('You are not on any waitlists.');
+    return;
+  }
+
+  waitlistGrid.innerHTML = state.waitlist
+    .map((item) => {
+      const isWaiting = item.status === 'waiting';
+      return `
+        <article class="course-card">
+          <h4>${escapeHtml(item.course.courseCode)} · ${escapeHtml(item.course.courseName)}</h4>
+          <p><strong>Status:</strong> ${
+            isWaiting
+              ? `<span class="badge badge-warning">Position #${item.position}</span>`
+              : '<span class="badge badge-success">Enrolled from waitlist</span>'
+          }</p>
+          ${isWaiting ? `<button data-action="leave-waitlist" data-id="${item.course._id}" class="btn btn-danger">Leave waitlist</button>` : ''}
+        </article>
+      `;
+    })
+    .join('');
+};
+
+const renderRegistrationHistory = () => {
+  if (!state.history.length) {
+    historyTableBody.innerHTML = '<tr><td colspan="7" class="text-muted text-center">No registration records found.</td></tr>';
+    return;
+  }
+
+  const badges = {
+    registered: '<span class="badge badge-success">Registered</span>',
+    dropped: '<span class="badge badge-danger">Dropped</span>',
+    completed: '<span class="badge badge-primary">Completed</span>',
+  };
+
+  historyTableBody.innerHTML = state.history
     .map(
-      (notification) => `
-        <div class="course-card">
-          <h4>${notification.title}</h4>
-          <p>${notification.message}</p>
-          <p class="text-muted">${notification.time}</p>
-        </div>
+      (item) => `
+        <tr>
+          <td><strong>${escapeHtml(item.registrationId)}</strong></td>
+          <td>${escapeHtml(item.course ? item.course.courseName : 'Deleted course')}</td>
+          <td><code>${escapeHtml(item.course ? item.course.courseCode : 'N/A')}</code></td>
+          <td>${item.course ? item.course.credits : 0}</td>
+          <td>${formatDate(item.registeredAt)}</td>
+          <td>${badges[item.status] || escapeHtml(item.status)}</td>
+          <td>${formatDate(item.droppedAt)}</td>
+        </tr>
       `
     )
     .join('');
 };
 
-const wishlistGrid = document.getElementById('wishlistGrid');
-const waitlistGrid = document.getElementById('waitlistGrid');
-
-const attachCourseActionEvents = (courses) => {
-  document.querySelectorAll('.register-btn').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const courseId = btn.dataset.courseId;
-      const targetCourse = courses.find((c) => c._id === courseId);
-      if (!targetCourse) return;
-
-      const currentCreds = parseInt(totalCredits.textContent || '0', 10);
-      const newCreds = currentCreds + (targetCourse.credits || 0);
-
-      const confirmed = await showConfirm({
-        title: `Register for ${targetCourse.courseCode}?`,
-        message: `Course: ${targetCourse.courseName}\nCredits: ${targetCourse.credits}\nInstructor: ${targetCourse.instructor}\nCurrent Credits: ${currentCreds} ➔ New Total: ${newCreds}/${maxCreditLimit} Credits`,
-        confirmText: 'Confirm Registration',
-        cancelText: 'Cancel',
-      });
-
-      if (!confirmed) return;
-
-      try {
-        await authFetch('/api/registrations', {
-          method: 'POST',
-          body: JSON.stringify({ courseId }),
-        });
-        showToast('Course registered successfully!', 'success');
-        loadStudentData();
-      } catch (error) {
-        showToast(error.message, 'error');
-      }
-    });
-  });
-
-  document.querySelectorAll('.wishlist-btn').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const courseId = btn.dataset.wishlistId;
-      try {
-        await authFetch('/api/wishlist', {
-          method: 'POST',
-          body: JSON.stringify({ courseId }),
-        });
-        showToast('Course added to wishlist!', 'success');
-        loadStudentData();
-      } catch (error) {
-        showToast(error.message, 'error');
-      }
-    });
-  });
-
-  document.querySelectorAll('[data-remove-wishlist-id]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const courseId = btn.dataset.removeWishlistId;
-      try {
-        await authFetch(`/api/wishlist/${courseId}`, { method: 'DELETE' });
-        showToast('Removed from wishlist.', 'info');
-        loadStudentData();
-      } catch (error) {
-        showToast(error.message, 'error');
-      }
-    });
-  });
-
-  document.querySelectorAll('.waitlist-btn').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const courseId = btn.dataset.waitlistId;
-      const targetCourse = courses.find((c) => c._id === courseId);
-      const confirmed = await showConfirm({
-        title: `Join Waitlist for ${targetCourse ? targetCourse.courseCode : 'Course'}?`,
-        message: `This course is currently at full capacity. Joining the waitlist will place you in queue for an available seat.`,
-        confirmText: 'Join Waitlist',
-        cancelText: 'Cancel',
-      });
-
-      if (!confirmed) return;
-
-      try {
-        const res = await authFetch('/api/waitlist', {
-          method: 'POST',
-          body: JSON.stringify({ courseId }),
-        });
-        showToast(res.message || 'Joined waitlist successfully!', 'success');
-        loadStudentData();
-      } catch (error) {
-        showToast(error.message, 'error');
-      }
-    });
-  });
-
-  document.querySelectorAll('[data-leave-waitlist-id]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const courseId = btn.dataset.leaveWaitlistId;
-      try {
-        await authFetch(`/api/waitlist/${courseId}`, { method: 'DELETE' });
-        showToast('Left waitlist queue.', 'info');
-        loadStudentData();
-      } catch (error) {
-        showToast(error.message, 'error');
-      }
-    });
-  });
-};
-
-const renderWishlist = (wishlistItems, allCourses) => {
-  if (!wishlistGrid) return;
-  if (!wishlistItems || !wishlistItems.length) {
-    wishlistGrid.innerHTML = '<p class="text-muted">Your wishlist is currently empty.</p>';
-    return;
-  }
-
-  wishlistGrid.innerHTML = wishlistItems
-    .map((item) => {
-      const course = item.course;
-      if (!course) return '';
-      return `
-        <div class="course-card">
-          <h4>${course.courseCode} - ${course.courseName}</h4>
-          <p>${course.description}</p>
-          <p><strong>Instructor:</strong> ${course.instructor}</p>
-          <p><strong>Credits:</strong> ${course.credits}</p>
-          <p><strong>Status:</strong> ${
-            item.isRegistered
-              ? '<span class="badge badge-success">Enrolled</span>'
-              : item.isFull
-              ? '<span class="badge badge-danger">Course Full</span>'
-              : '<span class="badge badge-success">Available</span>'
-          }</p>
-          <div class="card-actions">
-            ${
-              item.isRegistered
-                ? '<button disabled class="btn btn-secondary">Enrolled</button>'
-                : item.isFull
-                ? `<button data-waitlist-id="${course._id}" class="btn btn-warning waitlist-btn">Join Waitlist</button>`
-                : `<button data-course-id="${course._id}" class="btn btn-primary register-btn">Register</button>`
-            }
-            <button data-remove-wishlist-id="${course._id}" class="btn btn-danger">Remove</button>
-          </div>
-        </div>
-      `;
-    })
-    .join('');
-};
-
-const renderWaitlist = (waitlistItems) => {
-  if (!waitlistGrid) return;
-  if (!waitlistItems || !waitlistItems.length) {
-    waitlistGrid.innerHTML = '<p class="text-muted">You are not currently in any waitlists.</p>';
-    return;
-  }
-
-  waitlistGrid.innerHTML = waitlistItems
-    .map((item) => {
-      const course = item.course;
-      if (!course) return '';
-      const isWaiting = item.status === 'waiting';
-      return `
-        <div class="course-card">
-          <h4>${course.courseCode} - ${course.courseName}</h4>
-          <p><strong>Instructor:</strong> ${course.instructor}</p>
-          <p><strong>Credits:</strong> ${course.credits}</p>
-          <p><strong>Waitlist Position:</strong> ${
-            isWaiting
-              ? `<span class="badge badge-warning">Position #${item.position} in Queue</span>`
-              : `<span class="badge badge-success">Enrolled</span>`
-          }</p>
-          ${isWaiting ? `<button data-leave-waitlist-id="${course._id}" class="btn btn-danger">Leave Waitlist</button>` : ''}
-        </div>
-      `;
-    })
-    .join('');
+const renderAll = () => {
+  updateProfileSummary();
+  renderInstructorFilter();
+  renderCourses();
+  renderMyCourses();
+  renderWishlist();
+  renderWaitlist();
+  renderWeeklySchedule();
+  renderNotifications();
+  renderRegistrationHistory();
 };
 
 const loadStudentData = async () => {
   try {
-    const courses = await authFetch('/api/courses');
-    const myData = await authFetch('/api/registrations/my-courses');
-    const wishlistItems = await authFetch('/api/wishlist').catch(() => []);
-    const waitlistItems = await authFetch('/api/waitlist/my-waitlist').catch(() => []);
+    const [me, courses, mine, wishlist, waitlist, history] = await Promise.all([
+      authFetch('/api/auth/me'),
+      authFetch('/api/courses'),
+      authFetch('/api/registrations/my-courses'),
+      authFetch('/api/wishlist'),
+      authFetch('/api/waitlist/my-waitlist'),
+      authFetch('/api/registrations/history'),
+    ]);
 
-    let filteredCourses = courses;
-    const search = courseSearch.value.trim().toLowerCase();
-    if (search) {
-      filteredCourses = filteredCourses.filter((course) => {
-        return `${course.courseCode} ${course.courseName} ${course.instructor}`.toLowerCase().includes(search);
-      });
-    }
-
-    const filterValue = courseFilter.value;
-    if (filterValue) {
-      filteredCourses = filteredCourses.filter((course) => course.instructor === filterValue);
-    }
-
-    const registeredIds = new Set(myData.courses.map((course) => course._id));
-    const wishlistSet = new Set(wishlistItems.map((item) => (item.course ? item.course._id : null)));
-    const waitlistSet = new Set(waitlistItems.filter((i) => i.status === 'waiting').map((item) => (item.course ? item.course._id : null)));
-
-    renderCourses(filteredCourses, registeredIds, wishlistSet, waitlistSet);
-    renderMyCourses(myData);
-    renderWishlist(wishlistItems, courses);
-    renderWaitlist(waitlistItems);
-    attachCourseActionEvents(courses);
-    renderWeeklySchedule(myData.courses);
-    renderNotifications(myData.courses);
-    loadRegistrationHistory();
+    Object.assign(state, { profile: me.user, courses, myCourses: mine, wishlist, waitlist, history });
+    renderAll();
   } catch (error) {
     console.error(error);
     showToast(error.message, 'error');
   }
 };
 
-const historyTableBody = document.getElementById('historyTableBody');
+const courseById = (id) =>
+  state.courses.find((c) => c._id === id) || state.myCourses.courses.find((c) => c._id === id) || { courseCode: 'this course' };
 
-const renderRegistrationHistory = (historyItems) => {
-  if (!historyTableBody) return;
-
-  if (!historyItems || !historyItems.length) {
-    historyTableBody.innerHTML = '<tr><td colspan="7" class="text-muted text-center">No registration records found.</td></tr>';
-    return;
-  }
-
-  historyTableBody.innerHTML = historyItems
-    .map((item) => {
-      const regId = item.registrationId || item._id.slice(-8).toUpperCase();
-      const courseCode = item.course ? item.course.courseCode : 'N/A';
-      const courseName = item.course ? item.course.courseName : 'Unknown Course';
-      const credits = item.course ? item.course.credits : 0;
-      const regDate = item.registeredAt ? new Date(item.registeredAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A';
-      const dropDate = item.droppedAt ? new Date(item.droppedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '-';
-
-      let statusBadge = '<span class="badge badge-success">Registered</span>';
-      if (item.status === 'dropped') {
-        statusBadge = '<span class="badge badge-danger">Dropped</span>';
-      } else if (item.status === 'completed') {
-        statusBadge = '<span class="badge badge-primary">Completed</span>';
-      }
-
-      return `
-        <tr>
-          <td><strong>${regId}</strong></td>
-          <td>${courseName}</td>
-          <td><code>${courseCode}</code></td>
-          <td>${credits}</td>
-          <td>${regDate}</td>
-          <td>${statusBadge}</td>
-          <td>${dropDate}</td>
-        </tr>
-      `;
-    })
-    .join('');
+// One delegated click handler for every course action button on the page.
+const actions = {
+  async register(id) {
+    const course = courseById(id);
+    const current = state.myCourses.totalCredits;
+    const confirmed = await showConfirm({
+      title: `Register for ${course.courseCode}?`,
+      message: `${course.courseName}\nInstructor: ${course.instructor}\nCredits: ${current} → ${current + course.credits} of ${maxCreditLimit()}`,
+      confirmText: 'Confirm registration',
+    });
+    if (!confirmed) return;
+    await authFetch('/api/registrations', { method: 'POST', body: JSON.stringify({ courseId: id }) });
+    showToast(`Registered for ${course.courseCode}.`, 'success');
+  },
+  async drop(id) {
+    const course = courseById(id);
+    const confirmed = await showConfirm({
+      title: `Drop ${course.courseCode}?`,
+      message: 'Your seat will go to the next student on the waitlist.',
+      confirmText: 'Drop course',
+      danger: true,
+    });
+    if (!confirmed) return;
+    await authFetch(`/api/registrations/${id}`, { method: 'DELETE' });
+    showToast(`Dropped ${course.courseCode}.`, 'success');
+  },
+  async waitlist(id) {
+    const course = courseById(id);
+    const confirmed = await showConfirm({
+      title: `Join the waitlist for ${course.courseCode}?`,
+      message: 'This course is full. You will be enrolled automatically when a seat opens.',
+      confirmText: 'Join waitlist',
+    });
+    if (!confirmed) return;
+    const res = await authFetch('/api/waitlist', { method: 'POST', body: JSON.stringify({ courseId: id }) });
+    showToast(res.message, 'success');
+  },
+  async 'leave-waitlist'(id) {
+    await authFetch(`/api/waitlist/${id}`, { method: 'DELETE' });
+    showToast('Left the waitlist.', 'success');
+  },
+  async wishlist(id) {
+    await authFetch('/api/wishlist', { method: 'POST', body: JSON.stringify({ courseId: id }) });
+    showToast('Saved to wishlist.', 'success');
+  },
+  async unwishlist(id) {
+    await authFetch(`/api/wishlist/${id}`, { method: 'DELETE' });
+    showToast('Removed from wishlist.', 'success');
+  },
 };
 
-const loadRegistrationHistory = async () => {
+document.querySelector('.page-content').addEventListener('click', async (event) => {
+  const button = event.target.closest('button[data-action]');
+  if (!button || button.disabled) return;
+
+  button.disabled = true;
   try {
-    const history = await authFetch('/api/registrations/history');
-    renderRegistrationHistory(history);
+    await actions[button.dataset.action](button.dataset.id);
+    await loadStudentData();
   } catch (error) {
-    console.error('Failed to fetch registration history:', error);
+    showToast(error.message, 'error', 6000);
+  } finally {
+    button.disabled = false;
   }
-};
-
-courseSearch?.addEventListener('input', loadStudentData);
-courseFilter?.addEventListener('change', loadStudentData);
-logoutBtn?.addEventListener('click', () => {
-  logoutCurrentUser();
 });
 
-notificationButton?.addEventListener('click', () => {
+courseSearch.addEventListener('input', debounce(renderCourses, 150));
+courseFilter.addEventListener('change', renderCourses);
+$('logoutBtn').addEventListener('click', logoutCurrentUser);
+
+$('notificationButton').addEventListener('click', () => {
   window.location.hash = '#notifications';
-  sidebarLinks.forEach((link) => link.classList.remove('active'));
-  document.querySelector('.sidebar-link[href="#notifications"]')?.classList.add('active');
+  sidebarLinks.forEach((link) => link.classList.toggle('active', link.getAttribute('href') === '#notifications'));
 });
 
 sidebarLinks.forEach((link) => {

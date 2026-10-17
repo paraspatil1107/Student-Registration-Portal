@@ -106,18 +106,44 @@
 
 .course-form {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: 1fr;
   gap: 1rem;
 }
 
 .course-form textarea,
-.course-form input,
-.course-form button {
+.course-form input:not([type='checkbox']),
+.course-form select {
   width: 100%;
 }
 
-.course-form button {
-  align-self: end;
+.course-form fieldset {
+  border: none;
+  margin: 0;
+  padding: 0;
+}
+
+.course-form legend {
+  font-weight: 600;
+  margin-bottom: 0.45rem;
+}
+
+.course-form button[type='submit'] {
+  justify-self: start;
+  min-width: 180px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.panel-actions select {
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  padding: 0.8rem 1rem;
+  background: #fff;
 }
 
 .enrollment-list {

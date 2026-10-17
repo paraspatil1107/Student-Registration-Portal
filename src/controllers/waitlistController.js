@@ -1,14 +1,11 @@
 const Waitlist = require('../models/Waitlist');
 const Course = require('../models/Course');
 const Registration = require('../models/Registration');
+const { reorderWaitlist } = require('../utils/waitlist');
 
 const joinWaitlist = async (req, res) => {
   try {
     const { courseId } = req.body;
-
-    if (!courseId) {
-      return res.status(400).json({ message: 'Course ID is required.' });
-    }
 
     const course = await Course.findById(courseId);
     if (!course) {
@@ -23,6 +20,11 @@ const joinWaitlist = async (req, res) => {
 
     if (isAlreadyRegistered) {
       return res.status(400).json({ message: 'You are already enrolled in this course.' });
+    }
+
+    const enrolled = await Registration.countDocuments({ course: courseId, status: 'registered' });
+    if (enrolled < course.capacity) {
+      return res.status(400).json({ message: 'This course still has open seats. Register directly instead.' });
     }
 
     const existingWait = await Waitlist.findOne({
@@ -60,11 +62,11 @@ const joinWaitlist = async (req, res) => {
 
 const getMyWaitlist = async (req, res) => {
   try {
-    const waitlist = await Waitlist.find({ student: req.user._id })
+    const waitlist = await Waitlist.find({ student: req.user._id, status: { $ne: 'cancelled' } })
       .populate('course')
       .sort({ requestedAt: -1 });
 
-    res.json(waitlist);
+    res.json(waitlist.filter((item) => item.course));
   } catch (error) {
     res.status(500).json({ message: 'Unable to fetch waitlist.', error: error.message });
   }
@@ -84,12 +86,7 @@ const leaveWaitlist = async (req, res) => {
       return res.status(404).json({ message: 'Waitlist entry not found.' });
     }
 
-    // Adjust positions of remaining waitlisted students
-    const remaining = await Waitlist.find({ course: courseId, status: 'waiting' }).sort({ position: 1 });
-    for (let i = 0; i < remaining.length; i++) {
-      remaining[i].position = i + 1;
-      await remaining[i].save();
-    }
+    await reorderWaitlist(courseId);
 
     res.json({ message: 'Successfully removed from waitlist.' });
   } catch (error) {
