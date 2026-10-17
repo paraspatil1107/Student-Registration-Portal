@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Dashboard</title>
+    <link rel="stylesheet" href="css/style.css" />
+    <link rel="stylesheet" href="css/ui.css" />
+    <link rel="stylesheet" href="css/admin-dashboard.css" />
+    <link rel="stylesheet" href="css/shared.css" />
+  </head>
+  <body class="admin-layout">
+    <header class="admin-header">
+      <div class="brand-block">
+        <div class="brand-mark">N</div>
+        <div>
+          <span class="dashboard-kicker">Northstar</span>
+          <h1>Admin Dashboard</h1>
+        </div>
+      </div>
+      <div class="header-actions">
+        <span class="user-chip">Administrator</span>
+        <button id="logoutBtn" class="btn btn-danger">Logout</button>
+      </div>
+    </header>
+
+    <div class="admin-page">
+      <section class="panel">
+        <h3>Add New Course</h3>
+        <form id="courseForm" class="course-form">
+          <input type="text" id="courseCode" placeholder="Course Code" required />
+          <input type="text" id="courseName" placeholder="Course Name" required />
+          <textarea id="description" placeholder="Description" required></textarea>
+          <input type="number" id="credits" placeholder="Credits" required />
+          <input type="text" id="instructor" placeholder="Instructor" required />
+          <input type="number" id="capacity" placeholder="Capacity" required />
+          <button type="submit">Add Course</button>
+        </form>
+      </section>
+
+      <section class="panel">
+        <div class="section-header">
+          <div>
+            <h3>Enrollment Summary</h3>
+            <p class="subtitle">Track total users, courses, and registration demand.</p>
+          </div>
+        </div>
+        <div id="dashboardStats" class="stats-grid"></div>
+        <div class="enrollment-list" id="enrollmentList"></div>
+      </section>
+
+      <section class="admin-panel">
+        <div class="section-header">
+          <div>
+            <h3>All Courses</h3>
+            <p class="subtitle">Manage course catalog, capacity, and updates.</p>
+          </div>
+          <div class="panel-actions">
+            <input type="search" id="dashboardSearch" placeholder="Search courses" />
+          </div>
+        </div>
+        <div id="courseTable" class="table-wrapper"></div>
+      </section>
+
+      <section class="admin-panel">
+        <div class="section-header">
+          <div>
+            <h3>All Students</h3>
+            <p class="subtitle">View student accounts and roles.</p>
+          </div>
+        </div>
+        <div id="studentTable" class="table-wrapper"></div>
+      </section>
+
+      <section class="admin-panel">
+        <div class="section-header">
+          <div>
+            <h3>Registrations</h3>
+            <p class="subtitle">Recent enrollments and registration activity.</p>
+          </div>
+        </div>
+        <div id="registrationTable" class="table-wrapper"></div>
+      </section>
+    </div>
+
+    <script src="js/ui.js"></script>
+    <script src="js/adminDashboard.js"></script>
+  </body>
+</html>

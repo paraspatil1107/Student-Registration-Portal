@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Student Dashboard</title>
+    <link rel="stylesheet" href="css/style.css" />
+    <link rel="stylesheet" href="css/ui.css" />
+    <link rel="stylesheet" href="css/student-dashboard.css" />
+    <link rel="stylesheet" href="css/shared.css" />
+  </head>
+  <body class="main-layout">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-mark sidebar-mark">N</div>
+        <div>
+          <p class="sidebar-label">Northstar Academy</p>
+          <span class="sidebar-caption">Student Portal</span>
+        </div>
+      </div>
+      <nav class="sidebar-nav">
+        <a href="#overview" class="sidebar-link active">Dashboard</a>
+        <a href="#browse" class="sidebar-link">Browse Courses</a>
+        <a href="#registered" class="sidebar-link">My Courses</a>
+        <a href="#wishlist" class="sidebar-link">My Wishlist</a>
+        <a href="#waitlist" class="sidebar-link">Waitlist Queue</a>
+        <a href="#history" class="sidebar-link">Registration History</a>
+        <a href="#upcoming" class="sidebar-link">Schedule</a>
+        <a href="#notifications" class="sidebar-link">Notifications</a>
+        <a href="#profile" class="sidebar-link">Profile</a>
+      </nav>
+      <div class="sidebar-footer">
+        <button id="logoutBtn" class="btn btn-secondary sidebar-logout">Logout</button>
+      </div>
+    </aside>
+
+    <div class="page-content">
+      <header class="page-header">
+        <div>
+          <p class="subtitle">Student Dashboard</p>
+          <h1>Welcome back, <span id="studentName">Student</span></h1>
+          <p class="subtitle">ID: <strong id="studentId">NS-000000</strong> · Current semester: <strong id="currentSemester">Fall 2026</strong></p>
+        </div>
+        <div class="page-actions">
+          <button class="btn btn-secondary icon-button" id="notificationButton">🔔 <span class="badge badge-primary" id="notificationCount">0</span></button>
+          <div class="profile-chip">
+            <span id="avatarInitial">S</span>
+          </div>
+        </div>
+      </header>
+
+      <section id="overview" class="grid grid-3">
+        <div class="card">
+          <p class="text-muted">Total Credits</p>
+          <h2 id="totalCredits">0</h2>
+        </div>
+        <div class="card">
+          <p class="text-muted">Enrolled Courses</p>
+          <h2 id="enrolledCount">0</h2>
+        </div>
+        <div class="card">
+          <p class="text-muted">Remaining Credits</p>
+          <h2 id="pendingRegistrations">0</h2>
+        </div>
+      </section>
+
+      <section class="panel" id="summary">
+        <div class="section-header">
+          <div>
+            <h3 class="section-title">Academic Summary</h3>
+            <p class="subtitle">Your progress this semester</p>
+          </div>
+        </div>
+        <div class="progress-row">
+          <div>
+            <div class="progress-label">
+              <span>Completed credits</span>
+              <strong id="progressCredits">0 / 24</strong>
+            </div>
+            <div class="progress-bar">
+              <div id="progressFill" class="progress-fill"></div>
+            </div>
+          </div>
+          <div class="academic-stats">
+            <div>
+              <span class="text-muted">Maximum credits</span>
+              <strong id="maxCredits">24</strong>
+            </div>
+            <div>
+              <span class="text-muted">CGPA</span>
+              <strong id="cgpaValue">N/A</strong>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" id="upcoming">
+        <div class="section-header">
+          <div>
+            <h3 class="section-title">Weekly Schedule & Timetable</h3>
+            <p class="subtitle">Your weekly class timetable with automatic conflict detection</p>
+          </div>
+          <div id="scheduleConflictBanner"></div>
+        </div>
+        <div class="timetable-grid" id="timetableGrid">
+          <div class="timetable-col">
+            <div class="timetable-day-header">Monday</div>
+            <div class="timetable-day-slots" id="day-Mon"></div>
+          </div>
+          <div class="timetable-col">
+            <div class="timetable-day-header">Tuesday</div>
+            <div class="timetable-day-slots" id="day-Tue"></div>
+          </div>
+          <div class="timetable-col">
+            <div class="timetable-day-header">Wednesday</div>
+            <div class="timetable-day-slots" id="day-Wed"></div>
+          </div>
+          <div class="timetable-col">
+            <div class="timetable-day-header">Thursday</div>
+            <div class="timetable-day-slots" id="day-Thu"></div>
+          </div>
+          <div class="timetable-col">
+            <div class="timetable-day-header">Friday</div>
+            <div class="timetable-day-slots" id="day-Fri"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" id="browse">
+        <div class="section-header">
+          <div>
+            <h3 class="section-title">Browse Courses</h3>
+            <p class="subtitle">Search available courses and register directly</p>
+          </div>
+          <div class="card-actions">
+            <input type="text" id="courseSearch" placeholder="Search courses" />
+            <select id="courseFilter">
+              <option value="">All instructors</option>
+            </select>
+          </div>
+        </div>
+        <div id="courseList" class="card-grid"></div>
+      </section>
+
+      <section class="panel" id="registered">
+        <div class="section-header">
+          <div>
+            <h3 class="section-title">My Registered Courses</h3>
+            <p class="subtitle">Courses you are currently enrolled in</p>
+          </div>
+        </div>
+        <div id="myCourses" class="card-grid"></div>
+      </section>
+
+      <section class="panel" id="wishlist">
+        <div class="section-header">
+          <div>
+            <h3 class="section-title">My Wishlist</h3>
+            <p class="subtitle">Bookmarked courses for quick reference and enrollment</p>
+          </div>
+        </div>
+        <div id="wishlistGrid" class="card-grid"></div>
+      </section>
+
+      <section class="panel" id="waitlist">
+        <div class="section-header">
+          <div>
+            <h3 class="section-title">Waitlist Queue</h3>
+            <p class="subtitle">Courses you are waiting to get enrolled into</p>
+          </div>
+        </div>
+        <div id="waitlistGrid" class="card-grid"></div>
+      </section>
+
+      <section class="panel" id="history">
+        <div class="section-header">
+          <div>
+            <h3 class="section-title">Registration History</h3>
+            <p class="subtitle">Complete audit trail of all course registrations and drops</p>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="data-table" id="historyTable">
+            <thead>
+              <tr>
+                <th>Registration ID</th>
+                <th>Course</th>
+                <th>Code</th>
+                <th>Credits</th>
+                <th>Registered Date</th>
+                <th>Status</th>
+                <th>Drop Date</th>
+              </tr>
+            </thead>
+            <tbody id="historyTableBody">
+              <tr><td colspan="7" class="text-muted text-center">Loading history...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel" id="notifications">
+        <div class="section-header">
+          <div>
+            <h3 class="section-title">Recent Notifications</h3>
+            <p class="subtitle">Stay updated with system alerts</p>
+          </div>
+        </div>
+        <div id="notificationList" class="card-grid"></div>
+      </section>
+
+      <section class="panel" id="profile">
+        <div class="section-header">
+          <div>
+            <h3 class="section-title">Student Profile</h3>
+            <p class="subtitle">Review your contact and program information</p>
+          </div>
+        </div>
+        <div class="grid grid-2">
+          <div class="card profile-card">
+            <h4>Profile Details</h4>
+            <p><strong>Name:</strong> <span id="profileName">Student Name</span></p>
+            <p><strong>Email:</strong> <span id="profileEmail">student@example.com</span></p>
+            <p><strong>Student ID:</strong> <span id="profileId">NS-000000</span></p>
+            <p><strong>Department:</strong> <span id="profileDepartment">Computer Science</span></p>
+          </div>
+          <div class="card profile-card">
+            <h4>Academic Details</h4>
+            <p><strong>Semester:</strong> <span id="profileSemester">Fall 2026</span></p>
+            <p><strong>Year:</strong> <span id="profileYear">3</span></p>
+            <p><strong>Advisor:</strong> <span id="profileAdvisor">Dr. A. Sharma</span></p>
+            <p><strong>Date Joined:</strong> <span id="profileJoinDate">August 2024</span></p>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script src="js/ui.js"></script>
+    <script src="js/studentDashboard.js"></script>
+  </body>
+</html>
